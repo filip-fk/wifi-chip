@@ -1,0 +1,175 @@
+#include <IRremote.h>
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiAP.h>
+
+#define UP 2
+#define DOWN 4
+
+uint8_t up_pressed = 0;// up_pressed = false;
+
+//if true connects to an existing network 
+//if false creates a new hotspot
+
+//the credentials of the existing network(if applicable)
+const char *existing_ssid = "TP-Link_B87B";
+const char *existing_password = "82514778";
+
+WiFiServer server(80);
+
+//Sets up a static IP address making your URL contant 
+//which saving you the hassle of finding the IP address
+//everytime you want to connect
+
+// Set your Static IP address
+IPAddress local_IP(192, 168, 0, 102);
+// Set your Gateway IP address
+IPAddress gateway(192, 168, 0, 1);
+
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8); // optional
+IPAddress secondaryDNS(8, 8, 4, 4); // optional
+
+const int buffer_size = 100;
+char recieved_codes[buffer_size];
+char str[50];
+char code_word[10] = "command:";
+unsigned long code;
+int char_index = 0;
+
+/*Sets up program. Connects to wifi or creates a hotspot*/
+void setup() {
+  Serial.begin(9600);
+
+  Serial.println();
+  Serial.println("Configuring access point...");
+
+  // You can remove the password parameter if you want the AP to be open.
+  
+  // Configures static IP address
+  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("STA Failed to configure");
+  }
+  
+  WiFi.begin(existing_ssid, existing_password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  Serial.print("AP IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println(WiFi.macAddress());
+  
+  server.begin();
+  
+  Serial.println("Server started");
+  
+  //IrSender.begin(UP, ENABLE_LED_FEEDBACK); // Specify send pin and enable feedback LED at default feedback LED pin
+
+  Serial.print("Ready to send command at pin ");
+  Serial.println(UP);
+
+  pinMode(UP, OUTPUT);
+  pinMode(DOWN, OUTPUT);
+}
+
+/*checks for messages over wifi*/
+void check_wifi(){
+  WiFiClient client = server.available();   // listen for incoming clients
+  if (client) {                             // if you get a client,
+    Serial.println("New Client.");           // print a message out the serial port
+    String currentLine = "";                // make a String to hold incoming data from the client
+    while (client.connected()) {            // loop while the client's connected
+      if (client.available()) {             // if there's bytes to read from the client,
+        char c = client.read();             // read a byte, then
+        Serial.write(c);                    // print it out the serial monitor
+        if (c == '\n') {                    // if the byte is a newline character
+
+          // if the current line is blank, you got two newline characters in a row.
+          // that's the end of the client HTTP request, so send a response:
+          if (currentLine.length() == 0) {
+            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+            // and a content-type so the client knows what's coming, then a blank line:
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println();
+            //int response = getProjState(currentLine);
+            //client.println(response);
+            
+            for(int i = 0; recieved_codes[i] != '\0'; i++){
+              recieved_codes[i] = '\0';
+            }
+            char_index = 0;
+            // The HTTP response ends with another blank line:
+            client.println();
+            
+            // break out of the while loop:
+            break;
+          } else {//reached the end of the line
+            //if the line is a GET request(excluding a request for the icon)
+            if(currentLine.startsWith("GET /") &&  !currentLine.startsWith("GET /favicon.ico")){
+              String s = currentLine.substring(5);
+              //aux func
+              Serial.println(s);
+              toCode(s, client); //unsigned long c =
+              //int n = c.length();
+              //char char_array[n + 1];
+              //strcpy(char_array, c.c_str());
+              //cuts the string and converts it into a char array
+              //send_message(c);//char_array);
+            }
+            currentLine = "";
+          }
+        } else if (c != '\r') {  // if you got anything else but a carriage return character,
+          currentLine += c;      // add it to the end of the currentLine
+        }
+      }
+    }
+    // close the connection:
+    client.stop();
+    Serial.println("Client Disconnected.");
+  }
+}
+
+void toCode(String m, WiFiClient c){
+  unsigned long res = 0x0;//0x40BFB847;
+
+  if(m.startsWith("blinds"))
+  {  //projector
+    String mid = m.substring(7);
+    Serial.println(mid);
+
+    if(mid.startsWith("up")){
+      up_pressed = 1;
+      c.println('up');
+      digitalWrite(DOWN,0);
+      //wait(100);
+      digitalWrite(UP,1);
+      return;
+    }
+    else if(mid.startsWith("down")){
+      up_pressed = 0;
+      c.println('down');
+      digitalWrite(UP,0);
+      //wait(100);
+      digitalWrite(DOWN,1);
+      return;
+    }
+    else if(mid.startsWith("stop")){
+      up_pressed = 0;
+      c.println('stop');
+      digitalWrite(UP,0);
+      digitalWrite(DOWN,0);
+      return;
+    }
+  }
+}
+
+
+/*the main loop*/
+void loop() {
+  check_wifi();
+  //so smthg ab time
+}

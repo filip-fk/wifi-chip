@@ -1,0 +1,1888 @@
+#include <IRremote.h>
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiAP.h>
+
+#define IR_SEND_PIN 4
+#define SENDING_REPEATS 0
+
+
+const int user_input_size = 100;
+char user_input[user_input_size];
+int char_changing = 0;
+
+//if true connects to an existing network 
+//if false creates a new hotspot
+
+//the credentials of the existing network(if applicable)
+const char *existing_ssid = "TP-Link_3BD4";
+const char *existing_password = "89898512";
+
+WiFiServer server(80);
+
+//Sets up a static IP address making your URL contant 
+//which saving you the hassle of finding the IP address
+//everytime you want to connect
+
+// Set your Static IP address
+IPAddress local_IP(192, 168, 0, 107);
+// Set your Gateway IP address
+IPAddress gateway(192, 168, 0, 1);
+
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8); // optional
+IPAddress secondaryDNS(8, 8, 4, 4); // optional
+
+const int buffer_size = 100;
+char recieved_codes[buffer_size];
+char str[50];
+char code_word[10] = "command:";
+unsigned long code;
+int char_index = 0;
+
+/*Sets up program. Connects to wifi or creates a hotspot*/
+void setup() {
+  Serial.begin(9600);
+
+  Serial.println();
+  Serial.println("Configuring access point...");
+
+  // You can remove the password parameter if you want the AP to be open.
+  
+  // Configures static IP address
+  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("STA Failed to configure");
+  }
+  
+  WiFi.begin(existing_ssid, existing_password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  Serial.print("AP IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println(WiFi.macAddress());
+  
+  server.begin();
+  
+  Serial.println("Server started");
+  
+  IrSender.begin(IR_SEND_PIN, ENABLE_LED_FEEDBACK); // Specify send pin and enable feedback LED at default feedback LED pin
+
+  Serial.print("Ready to send IR signals at pin ");
+  Serial.println(IR_SEND_PIN);
+
+  pinMode(IR_SEND_PIN, OUTPUT);
+}
+
+/*sends an IR code*/
+void send_message(unsigned long c){//const char message[]){
+  //unsigned longs are 32 bits so max number is 4294967295 = FFFFFFFF
+  //unsigned long code = strtoul(message, NULL, 16);
+  Serial.print("Sending msg:");
+  Serial.println(c);
+  //Serial.print("Sending code:");
+  //Serial.println(code);
+
+  //the receiver has to be disabled to send messages
+   
+  IrSender.sendNEC(c,32);// SENDING_REPEATS); //sendNECRaw
+
+  //restarts the reciever
+}
+
+/*checks for messages over wifi*/
+void check_wifi(){
+  WiFiClient client = server.available();   // listen for incoming clients
+  if (client) {                             // if you get a client,
+    Serial.println("New Client.");           // print a message out the serial port
+    String currentLine = "";                // make a String to hold incoming data from the client
+    while (client.connected()) {            // loop while the client's connected
+      if (client.available()) {             // if there's bytes to read from the client,
+        char c = client.read();             // read a byte, then
+        Serial.write(c);                    // print it out the serial monitor
+        if (c == '\n') {                    // if the byte is a newline character
+
+          // if the current line is blank, you got two newline characters in a row.
+          // that's the end of the client HTTP request, so send a response:
+          if (currentLine.length() == 0) {
+            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+            // and a content-type so the client knows what's coming, then a blank line:
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println();
+
+            client.println(recieved_codes);
+            
+            for(int i = 0; recieved_codes[i] != '\0'; i++){
+              recieved_codes[i] = '\0';
+            }
+            char_index = 0;
+            // The HTTP response ends with another blank line:
+            client.println();
+            
+            // break out of the while loop:
+            break;
+          } else {//reached the end of the line
+            //if the line is a GET request(excluding a request for the icon)
+            if(currentLine.startsWith("GET /") &&  !currentLine.startsWith("GET /favicon.ico")){
+              String s = currentLine.substring(5);
+              //aux func
+              Serial.println(s);
+              unsigned long c = toCode(s);
+              //int n = c.length();
+              //char char_array[n + 1];
+              //strcpy(char_array, c.c_str());
+              //cuts the string and converts it into a char array
+              send_message(c);//char_array);
+            }
+            currentLine = "";
+          }
+        } else if (c != '\r') {  // if you got anything else but a carriage return character,
+          currentLine += c;      // add it to the end of the currentLine
+        }
+      }
+    }
+    // close the connection:
+    client.stop();
+    Serial.println("Client Disconnected.");
+  }
+}
+
+unsigned long toCode(String m){
+  unsigned long res = 0x40BFB847;
+
+  if(m.startsWith("projector/")){
+    if(m.substring(15).startsWith("on")){
+      res = 0x40BFB847;
+    }
+  }
+
+  return res;
+}
+
+
+/*the main loop*/
+void loop() {
+  check_wifi();
+}
+
+
+--------------
+
+#include <IRremote.h>
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiAP.h>
+
+#define IR_SEND_PIN 4
+#define SENDING_REPEATS 0
+
+
+const int user_input_size = 100;
+char user_input[user_input_size];
+int char_changing = 0;
+
+//if true connects to an existing network 
+//if false creates a new hotspot
+
+//the credentials of the existing network(if applicable)
+const char *existing_ssid = "TP-Link_3BD4";
+const char *existing_password = "89898512";
+
+WiFiServer server(80);
+
+//Sets up a static IP address making your URL contant 
+//which saving you the hassle of finding the IP address
+//everytime you want to connect
+
+// Set your Static IP address
+IPAddress local_IP(192, 168, 0, 107);
+// Set your Gateway IP address
+IPAddress gateway(192, 168, 0, 1);
+
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8); // optional
+IPAddress secondaryDNS(8, 8, 4, 4); // optional
+
+const int buffer_size = 100;
+char recieved_codes[buffer_size];
+char str[50];
+char code_word[10] = "command:";
+unsigned long code;
+int char_index = 0;
+
+/*Sets up program. Connects to wifi or creates a hotspot*/
+void setup() {
+  Serial.begin(9600);
+
+  Serial.println();
+  Serial.println("Configuring access point...");
+
+  // You can remove the password parameter if you want the AP to be open.
+  
+  // Configures static IP address
+  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("STA Failed to configure");
+  }
+  
+  WiFi.begin(existing_ssid, existing_password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  Serial.print("AP IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println(WiFi.macAddress());
+  
+  server.begin();
+  
+  Serial.println("Server started");
+  
+  IrSender.begin(IR_SEND_PIN, ENABLE_LED_FEEDBACK); // Specify send pin and enable feedback LED at default feedback LED pin
+
+  Serial.print("Ready to send IR signals at pin ");
+  Serial.println(IR_SEND_PIN);
+
+  pinMode(IR_SEND_PIN, OUTPUT);
+}
+
+/*sends an IR code*/
+void send_message(unsigned long c){//const char message[]){
+  //unsigned longs are 32 bits so max number is 4294967295 = FFFFFFFF
+  //unsigned long code = strtoul(message, NULL, 16);
+  Serial.print("Sending msg:");
+  Serial.println(c);
+  //Serial.print("Sending code:");
+  //Serial.println(code);
+
+  //the receiver has to be disabled to send messages
+   
+  IrSender.sendNEC(c,32);// SENDING_REPEATS); //sendNECRaw
+
+  //restarts the reciever
+}
+
+/*checks for messages over wifi*/
+void check_wifi(){
+  WiFiClient client = server.available();   // listen for incoming clients
+  if (client) {                             // if you get a client,
+    Serial.println("New Client.");           // print a message out the serial port
+    String currentLine = "";                // make a String to hold incoming data from the client
+    while (client.connected()) {            // loop while the client's connected
+      if (client.available()) {             // if there's bytes to read from the client,
+        char c = client.read();             // read a byte, then
+        Serial.write(c);                    // print it out the serial monitor
+        if (c == '\n') {                    // if the byte is a newline character
+
+          // if the current line is blank, you got two newline characters in a row.
+          // that's the end of the client HTTP request, so send a response:
+          if (currentLine.length() == 0) {
+            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+            // and a content-type so the client knows what's coming, then a blank line:
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println();
+
+            client.println(recieved_codes);
+            
+            for(int i = 0; recieved_codes[i] != '\0'; i++){
+              recieved_codes[i] = '\0';
+            }
+            char_index = 0;
+            // The HTTP response ends with another blank line:
+            client.println();
+            
+            // break out of the while loop:
+            break;
+          } else {//reached the end of the line
+            //if the line is a GET request(excluding a request for the icon)
+            if(currentLine.startsWith("GET /") &&  !currentLine.startsWith("GET /favicon.ico")){
+              String s = currentLine.substring(5);
+              //aux func
+              Serial.println(s);
+              toCode(s); //unsigned long c =
+              //int n = c.length();
+              //char char_array[n + 1];
+              //strcpy(char_array, c.c_str());
+              //cuts the string and converts it into a char array
+              //send_message(c);//char_array);
+            }
+            currentLine = "";
+          }
+        } else if (c != '\r') {  // if you got anything else but a carriage return character,
+          currentLine += c;      // add it to the end of the currentLine
+        }
+      }
+    }
+    // close the connection:
+    client.stop();
+    Serial.println("Client Disconnected.");
+  }
+}
+
+void toCode(String m){
+  unsigned long res = 0x40BFB847;
+
+  //projector
+  String mid = m.substring(10);
+  Serial.println(mid);
+
+  if(mid.startsWith("on")){
+    res = 0x40BFB847;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("off")){
+    res = 0x40BFB847;
+    send_message(res);
+    delay(500);
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("sources")){
+    res = 0x40BFF807;
+  }
+  else if(mid.startsWith("ok")){
+    res = 0x40BFD02F;
+  }
+  else if(mid.startsWith("l")){
+    res = 0x40BF50AF;
+  }
+  else if(mid.startsWith("r")){
+    res = 0x40BF10EF;
+  }
+  else if(mid.startsWith("u")){
+    res = 0x40BF906F;
+  }
+  else if(mid.startsWith("d")){
+    res = 0x40BF807F;
+  }
+  else if(mid.startsWith("vup")){
+    res = 0x40BF8877;
+  }
+  else if(mid.startsWith("vdown")){
+    res = 0x40BFA857;
+  }
+  else if(mid.startsWith("mute")){
+    res = 0x40BF40BF;
+  }
+  else if(mid.startsWith("back")){
+    res = 0x40BFB04F;
+  }
+  else if(mid.startsWith("options")){
+    res = 0x40BF7887;
+  }
+  else if(mid.startsWith("hdmi")){
+    send_message(0x40BFF807); //sources
+    delay(500);
+    send_message(0x40BF807F); //d
+    delay(500);
+    send_message(0x40BF10EF); //r
+    delay(500);
+    send_message(0x40BFD02F); //ok
+  }
+  else{
+    unsigned long code = strtoul(m.substring(0,10), NULL, 16);
+    send_message(code);
+    Serial.println(code);
+  }
+
+  send_message(res);
+  return;
+}
+
+
+/*the main loop*/
+void loop() {
+  check_wifi();
+}
+---------
+22/11/2022
+---------
+#include <IRremote.h>
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiAP.h>
+
+#define IR_SEND_PIN 4
+#define SENDING_REPEATS 0
+
+bool proj_on = false;
+
+const int user_input_size = 100;
+char user_input[user_input_size];
+int char_changing = 0;
+
+//if true connects to an existing network 
+//if false creates a new hotspot
+
+//the credentials of the existing network(if applicable)
+const char *existing_ssid = "TP-Link_3BD4";
+const char *existing_password = "89898512";
+
+WiFiServer server(80);
+
+//Sets up a static IP address making your URL contant 
+//which saving you the hassle of finding the IP address
+//everytime you want to connect
+
+// Set your Static IP address
+IPAddress local_IP(192, 168, 0, 107);
+// Set your Gateway IP address
+IPAddress gateway(192, 168, 0, 1);
+
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8); // optional
+IPAddress secondaryDNS(8, 8, 4, 4); // optional
+
+const int buffer_size = 100;
+char recieved_codes[buffer_size];
+char str[50];
+char code_word[10] = "command:";
+unsigned long code;
+int char_index = 0;
+
+/*Sets up program. Connects to wifi or creates a hotspot*/
+void setup() {
+  Serial.begin(9600);
+
+  Serial.println();
+  Serial.println("Configuring access point...");
+
+  // You can remove the password parameter if you want the AP to be open.
+  
+  // Configures static IP address
+  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("STA Failed to configure");
+  }
+  
+  WiFi.begin(existing_ssid, existing_password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  Serial.print("AP IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println(WiFi.macAddress());
+  
+  server.begin();
+  
+  Serial.println("Server started");
+  
+  IrSender.begin(IR_SEND_PIN, ENABLE_LED_FEEDBACK); // Specify send pin and enable feedback LED at default feedback LED pin
+
+  Serial.print("Ready to send IR signals at pin ");
+  Serial.println(IR_SEND_PIN);
+
+  pinMode(IR_SEND_PIN, OUTPUT);
+}
+
+/*sends an IR code*/
+void send_message(unsigned long c){//const char message[]){
+  //unsigned longs are 32 bits so max number is 4294967295 = FFFFFFFF
+  //unsigned long code = strtoul(message, NULL, 16);
+  Serial.print("Sending msg:");
+  Serial.println(c);
+  //Serial.print("Sending code:");
+  //Serial.println(code);
+
+  //the receiver has to be disabled to send messages
+   
+  IrSender.sendNEC(c,32);// SENDING_REPEATS); //sendNECRaw
+
+  //restarts the reciever
+}
+
+/*checks for messages over wifi*/
+void check_wifi(){
+  WiFiClient client = server.available();   // listen for incoming clients
+  if (client) {                             // if you get a client,
+    Serial.println("New Client.");           // print a message out the serial port
+    String currentLine = "";                // make a String to hold incoming data from the client
+    while (client.connected()) {            // loop while the client's connected
+      if (client.available()) {             // if there's bytes to read from the client,
+        char c = client.read();             // read a byte, then
+        Serial.write(c);                    // print it out the serial monitor
+        if (c == '\n') {                    // if the byte is a newline character
+
+          // if the current line is blank, you got two newline characters in a row.
+          // that's the end of the client HTTP request, so send a response:
+          if (currentLine.length() == 0) {
+            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+            // and a content-type so the client knows what's coming, then a blank line:
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println();
+
+            int response = getProjState(currentLine);
+            client.println(response);
+            client.println(recieved_codes);
+            
+            for(int i = 0; recieved_codes[i] != '\0'; i++){
+              recieved_codes[i] = '\0';
+            }
+            char_index = 0;
+            // The HTTP response ends with another blank line:
+            client.println();
+            
+            // break out of the while loop:
+            break;
+          } else {//reached the end of the line
+            //if the line is a GET request(excluding a request for the icon)
+            if(currentLine.startsWith("GET /") &&  !currentLine.startsWith("GET /favicon.ico")){
+              String s = currentLine.substring(5);
+              //aux func
+              Serial.println(s);
+              toCode(s); //unsigned long c =
+              //int n = c.length();
+              //char char_array[n + 1];
+              //strcpy(char_array, c.c_str());
+              //cuts the string and converts it into a char array
+              //send_message(c);//char_array);
+            }
+            currentLine = "";
+          }
+        } else if (c != '\r') {  // if you got anything else but a carriage return character,
+          currentLine += c;      // add it to the end of the currentLine
+        }
+      }
+    }
+    // close the connection:
+    client.stop();
+    Serial.println("Client Disconnected.");
+  }
+}
+
+int getProjState(String instr){
+  int res = 2;
+  if(currentLine.startsWith("GET /") &&  !currentLine.startsWith("GET /favicon.ico")){
+    String s = currentLine.substring(15);
+    if(mid.startsWith("status")){
+      Serial.println("get_status");
+      res = Serial.read();
+      return res;
+    }
+  }
+  return res;
+}
+
+void toCode(String m){
+  unsigned long res = 0x0;//0x40BFB847;
+
+  //projector
+  String mid = m.substring(10);
+  Serial.println(mid);
+
+  if(mid.startsWith("on")){
+    proj_on = true;
+    res = 0x40BFB847;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("off")){
+    proj_on = false;
+    res = 0x40BFB847;
+    send_message(res);
+    delay(700);
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("sources")){
+    res = 0x40BFF807;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("ok")){
+    res = 0x40BFD02F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("l")){
+    res = 0x40BF50AF;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("r")){
+    res = 0x40BF10EF;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("u")){
+    res = 0x40BF906F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("d")){
+    res = 0x40BF807F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("vup")){
+    res = 0x40BF8877;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("vdown")){
+    res = 0x40BFA857;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("mute")){
+    res = 0x40BF40BF;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("back")){
+    res = 0x40BFB04F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("options")){
+    res = 0x40BF7887;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("hdmi")){
+    send_message(0x40BFF807); //sources
+    delay(500);
+    send_message(0x40BF807F); //d
+    delay(500);
+    send_message(0x40BF10EF); //r
+    delay(500);
+    send_message(0x40BFD02F); //ok
+    return;
+  }
+  else if(mid.startsWith("status")){
+    res = "0x0";
+    return;
+  }
+  else{
+    int n = m.substring(0,10).length();
+    char char_array[n + 1];
+    strcpy(char_array, m.substring(0,10).c_str());
+    unsigned long code = strtoul(char_array, NULL, 16);
+    send_message(code);
+    Serial.println(code);
+  }
+
+}
+
+
+/*the main loop*/
+void loop() {
+  check_wifi();
+}
+
+-------
+4am
+-------
+#include <IRremote.h>
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiAP.h>
+
+#define IR_SEND_PIN 4
+#define SENDING_REPEATS 0
+
+bool proj_on = false;
+
+const int user_input_size = 100;
+char user_input[user_input_size];
+int char_changing = 0;
+
+//if true connects to an existing network 
+//if false creates a new hotspot
+
+//the credentials of the existing network(if applicable)
+const char *existing_ssid = "TP-Link_3BD4";
+const char *existing_password = "89898512";
+
+WiFiServer server(80);
+
+//Sets up a static IP address making your URL contant 
+//which saving you the hassle of finding the IP address
+//everytime you want to connect
+
+// Set your Static IP address
+IPAddress local_IP(192, 168, 0, 107);
+// Set your Gateway IP address
+IPAddress gateway(192, 168, 0, 1);
+
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8); // optional
+IPAddress secondaryDNS(8, 8, 4, 4); // optional
+
+const int buffer_size = 100;
+char recieved_codes[buffer_size];
+char str[50];
+char code_word[10] = "command:";
+unsigned long code;
+int char_index = 0;
+
+/*Sets up program. Connects to wifi or creates a hotspot*/
+void setup() {
+  Serial.begin(9600);
+
+  Serial.println();
+  Serial.println("Configuring access point...");
+
+  // You can remove the password parameter if you want the AP to be open.
+  
+  // Configures static IP address
+  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("STA Failed to configure");
+  }
+  
+  WiFi.begin(existing_ssid, existing_password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  Serial.print("AP IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println(WiFi.macAddress());
+  
+  server.begin();
+  
+  Serial.println("Server started");
+  
+  IrSender.begin(IR_SEND_PIN, ENABLE_LED_FEEDBACK); // Specify send pin and enable feedback LED at default feedback LED pin
+
+  Serial.print("Ready to send IR signals at pin ");
+  Serial.println(IR_SEND_PIN);
+
+  pinMode(IR_SEND_PIN, OUTPUT);
+}
+
+/*sends an IR code*/
+void send_message(unsigned long c){//const char message[]){
+  //unsigned longs are 32 bits so max number is 4294967295 = FFFFFFFF
+  //unsigned long code = strtoul(message, NULL, 16);
+  Serial.print("Sending msg:");
+  Serial.println(c);
+  //Serial.print("Sending code:");
+  //Serial.println(code);
+
+  //the receiver has to be disabled to send messages
+   
+  IrSender.sendNEC(c,32);// SENDING_REPEATS); //sendNECRaw
+
+  //restarts the reciever
+}
+
+/*checks for messages over wifi*/
+void check_wifi(){
+  WiFiClient client = server.available();   // listen for incoming clients
+  if (client) {                             // if you get a client,
+    Serial.println("New Client.");           // print a message out the serial port
+    String currentLine = "";                // make a String to hold incoming data from the client
+    while (client.connected()) {            // loop while the client's connected
+      if (client.available()) {             // if there's bytes to read from the client,
+        char c = client.read();             // read a byte, then
+        Serial.write(c);                    // print it out the serial monitor
+        if (c == '\n') {                    // if the byte is a newline character
+
+          // if the current line is blank, you got two newline characters in a row.
+          // that's the end of the client HTTP request, so send a response:
+          if (currentLine.length() == 0) {
+            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+            // and a content-type so the client knows what's coming, then a blank line:
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println();
+
+            //int response = getProjState(currentLine);
+            //client.println(response);
+            client.println(recieved_codes);
+            
+            for(int i = 0; recieved_codes[i] != '\0'; i++){
+              recieved_codes[i] = '\0';
+            }
+            char_index = 0;
+            // The HTTP response ends with another blank line:
+            client.println();
+            
+            // break out of the while loop:
+            break;
+          } else {//reached the end of the line
+            //if the line is a GET request(excluding a request for the icon)
+            if(currentLine.startsWith("GET /") &&  !currentLine.startsWith("GET /favicon.ico")){
+              String s = currentLine.substring(5);
+              //aux func
+              Serial.println(s);
+              toCode(s, client); //unsigned long c =
+              //int n = c.length();
+              //char char_array[n + 1];
+              //strcpy(char_array, c.c_str());
+              //cuts the string and converts it into a char array
+              //send_message(c);//char_array);
+            }
+            currentLine = "";
+          }
+        } else if (c != '\r') {  // if you got anything else but a carriage return character,
+          currentLine += c;      // add it to the end of the currentLine
+        }
+      }
+    }
+    // close the connection:
+    client.stop();
+    Serial.println("Client Disconnected.");
+  }
+}
+
+int getProjState(){
+  int res = 2;
+  
+  Serial.print("get_status\n");
+  res = 3;
+  delay(500);
+  res = Serial.read();
+
+  return res;
+}
+
+void toCode(String m, WiFiClient c){
+  unsigned long res = 0x0;//0x40BFB847;
+
+  //projector
+  String mid = m.substring(10);
+  Serial.println(mid);
+
+  if(mid.startsWith("on")){
+    proj_on = true;
+    res = 0x40BFB847;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("off")){
+    proj_on = false;
+    res = 0x40BFB847;
+    send_message(res);
+    delay(700);
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("sources")){
+    res = 0x40BFF807;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("ok")){
+    res = 0x40BFD02F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("l")){
+    res = 0x40BF50AF;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("r")){
+    res = 0x40BF10EF;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("u")){
+    res = 0x40BF906F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("d")){
+    res = 0x40BF807F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("vup")){
+    res = 0x40BF8877;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("vdown")){
+    res = 0x40BFA857;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("mute")){
+    res = 0x40BF40BF;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("back")){
+    res = 0x40BFB04F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("options")){
+    res = 0x40BF7887;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("hdmi")){
+    send_message(0x40BFF807); //sources
+    delay(500);
+    send_message(0x40BF807F); //d
+    delay(500);
+    send_message(0x40BF10EF); //r
+    delay(500);
+    send_message(0x40BFD02F); //ok
+    return;
+  }
+  else if(mid.startsWith("status")){
+    res = 0x0;
+
+    int response = getProjState();
+    c.println(response);
+    c.stop();
+    return;
+  }
+  else{
+    int n = m.substring(0,10).length();
+    char char_array[n + 1];
+    strcpy(char_array, m.substring(0,10).c_str());
+    unsigned long code = strtoul(char_array, NULL, 16);
+    send_message(code);
+    Serial.println(code);
+  }
+
+}
+
+
+/*the main loop*/
+void loop() {
+  check_wifi();
+}
+
+-------
+6am
+-------
+#include <IRremote.h>
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiAP.h>
+
+#define IR_SEND_PIN 4
+#define SENDING_REPEATS 0
+
+bool proj_on = false;
+
+const int user_input_size = 100;
+char user_input[user_input_size];
+int char_changing = 0;
+
+//if true connects to an existing network 
+//if false creates a new hotspot
+
+//the credentials of the existing network(if applicable)
+const char *existing_ssid = "TP-Link_3BD4";
+const char *existing_password = "89898512";
+
+WiFiServer server(80);
+
+//Sets up a static IP address making your URL contant 
+//which saving you the hassle of finding the IP address
+//everytime you want to connect
+
+// Set your Static IP address
+IPAddress local_IP(192, 168, 0, 107);
+// Set your Gateway IP address
+IPAddress gateway(192, 168, 0, 1);
+
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8); // optional
+IPAddress secondaryDNS(8, 8, 4, 4); // optional
+
+const int buffer_size = 100;
+char recieved_codes[buffer_size];
+char str[50];
+char code_word[10] = "command:";
+unsigned long code;
+int char_index = 0;
+
+/*Sets up program. Connects to wifi or creates a hotspot*/
+void setup() {
+  Serial.begin(9600);
+
+  Serial.println();
+  Serial.println("Configuring access point...");
+
+  // You can remove the password parameter if you want the AP to be open.
+  
+  // Configures static IP address
+  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("STA Failed to configure");
+  }
+  
+  WiFi.begin(existing_ssid, existing_password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  Serial.print("AP IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println(WiFi.macAddress());
+  
+  server.begin();
+  
+  Serial.println("Server started");
+  
+  IrSender.begin(IR_SEND_PIN, ENABLE_LED_FEEDBACK); // Specify send pin and enable feedback LED at default feedback LED pin
+
+  Serial.print("Ready to send IR signals at pin ");
+  Serial.println(IR_SEND_PIN);
+
+  pinMode(IR_SEND_PIN, OUTPUT);
+}
+
+/*sends an IR code*/
+void send_message(unsigned long c){//const char message[]){
+  //unsigned longs are 32 bits so max number is 4294967295 = FFFFFFFF
+  //unsigned long code = strtoul(message, NULL, 16);
+  Serial.print("Sending msg:");
+  Serial.println(c);
+  //Serial.print("Sending code:");
+  //Serial.println(code);
+
+  //the receiver has to be disabled to send messages
+   
+  IrSender.sendNEC(c,32);// SENDING_REPEATS); //sendNECRaw
+
+  //restarts the reciever
+}
+
+int count = 0;
+/*checks for messages over wifi*/
+void check_wifi(){
+  WiFiClient client = server.available();   // listen for incoming clients
+  if (client) {                             // if you get a client,
+    Serial.println("New Client.");           // print a message out the serial port
+    String currentLine = "";                // make a String to hold incoming data from the client
+    while (client.connected()) {            // loop while the client's connected
+      if (client.available()) {             // if there's bytes to read from the client,
+        char c = client.read();             // read a byte, then
+        Serial.write(c);                    // print it out the serial monitor
+        if (c == '\n') {                    // if the byte is a newline character
+
+          // if the current line is blank, you got two newline characters in a row.
+          // that's the end of the client HTTP request, so send a response:
+          if (currentLine.length() == 0) {
+            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+            // and a content-type so the client knows what's coming, then a blank line:
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println();
+            //int response = getProjState(currentLine);
+            //client.println(response);
+            client.println(proj_on?1:0);
+            client.println(recieved_codes);
+            
+            for(int i = 0; recieved_codes[i] != '\0'; i++){
+              recieved_codes[i] = '\0';
+            }
+            char_index = 0;
+            // The HTTP response ends with another blank line:
+            client.println();
+            
+            // break out of the while loop:
+            break;
+          } else {//reached the end of the line
+            //if the line is a GET request(excluding a request for the icon)
+            if(currentLine.startsWith("GET /") &&  !currentLine.startsWith("GET /favicon.ico")){
+              String s = currentLine.substring(5);
+              //aux func
+              Serial.println(s);
+              toCode(s, client); //unsigned long c =
+              //int n = c.length();
+              //char char_array[n + 1];
+              //strcpy(char_array, c.c_str());
+              //cuts the string and converts it into a char array
+              //send_message(c);//char_array);
+            }
+            currentLine = "";
+          }
+        } else if (c != '\r') {  // if you got anything else but a carriage return character,
+          currentLine += c;      // add it to the end of the currentLine
+        }
+      }
+    }
+    // close the connection:
+    client.stop();
+    Serial.println("Client Disconnected.");
+  }
+}
+
+void getProjState(){
+  char res = '2';
+  
+  Serial.print("get_status\n");
+  res = '3';
+  delay(500);
+  if (Serial.available() > 0) {
+    // read the incoming byte:
+    res = Serial.read();
+    if(res == '1'){
+      proj_on = true;
+    }
+    else if(res == '0'){
+      proj_on = false;
+    }
+    Serial.println("got: "+res);
+    Serial.println("proj: "+proj_on);
+  }
+}
+
+void toCode(String m, WiFiClient c){
+  unsigned long res = 0x0;//0x40BFB847;
+
+  //projector
+  String mid = m.substring(10);
+  Serial.println(mid);
+
+  if(mid.startsWith("on")){
+    proj_on = true;
+    res = 0x40BFB847;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("off")){
+    //res = ;
+    proj_on = false;
+    send_message(0x40BFB847);
+    delay(2000);
+    send_message(0x40BFB847);
+    return;
+  }
+  else if(mid.startsWith("sources")){
+    res = 0x40BFF807;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("ok")){
+    res = 0x40BFD02F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("l")){
+    res = 0x40BF50AF;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("r")){
+    res = 0x40BF10EF;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("u")){
+    res = 0x40BF906F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("d")){
+    res = 0x40BF807F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("vup")){
+    res = 0x40BF8877;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("vdown")){
+    res = 0x40BFA857;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("mute")){
+    res = 0x40BF40BF;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("back")){
+    res = 0x40BFB04F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("options")){
+    res = 0x40BF7887;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("hdmi")){
+    send_message(0x40BFF807); //sources
+    delay(500);
+    send_message(0x40BF807F); //d
+    delay(500);
+    send_message(0x40BF10EF); //r
+    delay(500);
+    send_message(0x40BFD02F); //ok
+    return;
+  }
+  else if(mid.startsWith("status")){
+    res = 0x0;
+
+    getProjState();
+    
+    return;
+  }
+  else{
+    int n = m.substring(0,10).length();
+    char char_array[n + 1];
+    strcpy(char_array, m.substring(0,10).c_str());
+    unsigned long code = strtoul(char_array, NULL, 16);
+    send_message(code);
+    Serial.println(code);
+  }
+
+}
+
+
+/*the main loop*/
+void loop() {
+  check_wifi();
+}
+
+--------
+new network
+--------
+
+#include <IRremote.h>
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiAP.h>
+
+#define IR_SEND_PIN 4
+#define SENDING_REPEATS 0
+
+bool proj_on = false;
+
+const int user_input_size = 100;
+char user_input[user_input_size];
+int char_changing = 0;
+
+//if true connects to an existing network 
+//if false creates a new hotspot
+
+//the credentials of the existing network(if applicable)
+const char *existing_ssid = "TP-Link_B87B";
+const char *existing_password = "82514778";
+
+WiFiServer server(80);
+
+//Sets up a static IP address making your URL contant 
+//which saving you the hassle of finding the IP address
+//everytime you want to connect
+
+// Set your Static IP address
+IPAddress local_IP(192, 168, 0, 107);
+// Set your Gateway IP address
+IPAddress gateway(192, 168, 0, 1);
+
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8); // optional
+IPAddress secondaryDNS(8, 8, 4, 4); // optional
+
+const int buffer_size = 100;
+char recieved_codes[buffer_size];
+char str[50];
+char code_word[10] = "command:";
+unsigned long code;
+int char_index = 0;
+
+/*Sets up program. Connects to wifi or creates a hotspot*/
+void setup() {
+  Serial.begin(9600);
+
+  Serial.println();
+  Serial.println("Configuring access point...");
+
+  // You can remove the password parameter if you want the AP to be open.
+  
+  // Configures static IP address
+  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("STA Failed to configure");
+  }
+  
+  WiFi.begin(existing_ssid, existing_password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  Serial.print("AP IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println(WiFi.macAddress());
+  
+  server.begin();
+  
+  Serial.println("Server started");
+  
+  IrSender.begin(IR_SEND_PIN, ENABLE_LED_FEEDBACK); // Specify send pin and enable feedback LED at default feedback LED pin
+
+  Serial.print("Ready to send IR signals at pin ");
+  Serial.println(IR_SEND_PIN);
+
+  pinMode(IR_SEND_PIN, OUTPUT);
+}
+
+/*sends an IR code*/
+void send_message(unsigned long c){//const char message[]){
+  //unsigned longs are 32 bits so max number is 4294967295 = FFFFFFFF
+  //unsigned long code = strtoul(message, NULL, 16);
+  Serial.print("Sending msg:");
+  Serial.println(c);
+  //Serial.print("Sending code:");
+  //Serial.println(code);
+
+  //the receiver has to be disabled to send messages
+   
+  IrSender.sendNEC(c,32);// SENDING_REPEATS); //sendNECRaw
+
+  //restarts the reciever
+}
+
+int count = 0;
+/*checks for messages over wifi*/
+void check_wifi(){
+  WiFiClient client = server.available();   // listen for incoming clients
+  if (client) {                             // if you get a client,
+    Serial.println("New Client.");           // print a message out the serial port
+    String currentLine = "";                // make a String to hold incoming data from the client
+    while (client.connected()) {            // loop while the client's connected
+      if (client.available()) {             // if there's bytes to read from the client,
+        char c = client.read();             // read a byte, then
+        Serial.write(c);                    // print it out the serial monitor
+        if (c == '\n') {                    // if the byte is a newline character
+
+          // if the current line is blank, you got two newline characters in a row.
+          // that's the end of the client HTTP request, so send a response:
+          if (currentLine.length() == 0) {
+            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+            // and a content-type so the client knows what's coming, then a blank line:
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println();
+            //int response = getProjState(currentLine);
+            //client.println(response);
+            client.println(proj_on?1:0);
+            client.println(recieved_codes);
+            
+            for(int i = 0; recieved_codes[i] != '\0'; i++){
+              recieved_codes[i] = '\0';
+            }
+            char_index = 0;
+            // The HTTP response ends with another blank line:
+            client.println();
+            
+            // break out of the while loop:
+            break;
+          } else {//reached the end of the line
+            //if the line is a GET request(excluding a request for the icon)
+            if(currentLine.startsWith("GET /") &&  !currentLine.startsWith("GET /favicon.ico")){
+              String s = currentLine.substring(5);
+              //aux func
+              Serial.println(s);
+              toCode(s, client); //unsigned long c =
+              //int n = c.length();
+              //char char_array[n + 1];
+              //strcpy(char_array, c.c_str());
+              //cuts the string and converts it into a char array
+              //send_message(c);//char_array);
+            }
+            currentLine = "";
+          }
+        } else if (c != '\r') {  // if you got anything else but a carriage return character,
+          currentLine += c;      // add it to the end of the currentLine
+        }
+      }
+    }
+    // close the connection:
+    client.stop();
+    Serial.println("Client Disconnected.");
+  }
+}
+
+void getProjState(){
+  char res = '2';
+  
+  Serial.print("get_status\n");
+  res = '3';
+  delay(500);
+  if (Serial.available() > 0) {
+    // read the incoming byte:
+    res = Serial.read();
+    if(res == '1'){
+      proj_on = true;
+    }
+    else if(res == '0'){
+      proj_on = false;
+    }
+    Serial.println("got: "+res);
+    Serial.println("proj: "+proj_on);
+  }
+}
+
+void toCode(String m, WiFiClient c){
+  unsigned long res = 0x0;//0x40BFB847;
+
+  //projector
+  String mid = m.substring(10);
+  Serial.println(mid);
+
+  if(mid.startsWith("on")){
+    proj_on = true;
+    res = 0x40BFB847;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("off")){
+    //res = ;
+    proj_on = false;
+    send_message(0x40BFB847);
+    delay(2000);
+    send_message(0x40BFB847);
+    return;
+  }
+  else if(mid.startsWith("sources")){
+    res = 0x40BFF807;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("ok")){
+    res = 0x40BFD02F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("l")){
+    res = 0x40BF50AF;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("r")){
+    res = 0x40BF10EF;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("u")){
+    res = 0x40BF906F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("d")){
+    res = 0x40BF807F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("vup")){
+    res = 0x40BF8877;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("vdown")){
+    res = 0x40BFA857;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("mute")){
+    res = 0x40BF40BF;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("back")){
+    res = 0x40BFB04F;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("options")){
+    res = 0x40BF7887;
+    send_message(res);
+    return;
+  }
+  else if(mid.startsWith("hdmi")){
+    send_message(0x40BFF807); //sources
+    delay(500);
+    send_message(0x40BF807F); //d
+    delay(500);
+    send_message(0x40BF10EF); //r
+    delay(500);
+    send_message(0x40BFD02F); //ok
+    return;
+  }
+  else if(mid.startsWith("status")){
+    res = 0x0;
+
+    getProjState();
+    
+    return;
+  }
+  else{
+    int n = m.substring(0,10).length();
+    char char_array[n + 1];
+    strcpy(char_array, m.substring(0,10).c_str());
+    unsigned long code = strtoul(char_array, NULL, 16);
+    send_message(code);
+    Serial.println(code);
+  }
+
+}
+
+
+/*the main loop*/
+void loop() {
+  check_wifi();
+}
+
+
+
+
+---new version---
+14/03/2023
+added fairy lights support
+---new vetsion---
+
+
+
+
+#include <IRremote.h>
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiAP.h>
+
+#define IR_SEND_PIN 4
+#define SENDING_REPEATS 0
+
+bool proj_on = false;
+
+const int user_input_size = 100;
+char user_input[user_input_size];
+int char_changing = 0;
+
+//if true connects to an existing network 
+//if false creates a new hotspot
+
+//the credentials of the existing network(if applicable)
+const char *existing_ssid = "TP-Link_B87B";
+const char *existing_password = "82514778";
+
+WiFiServer server(80);
+
+//Sets up a static IP address making your URL contant 
+//which saving you the hassle of finding the IP address
+//everytime you want to connect
+
+// Set your Static IP address
+IPAddress local_IP(192, 168, 0, 107);
+// Set your Gateway IP address
+IPAddress gateway(192, 168, 0, 1);
+
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8); // optional
+IPAddress secondaryDNS(8, 8, 4, 4); // optional
+
+const int buffer_size = 100;
+char recieved_codes[buffer_size];
+char str[50];
+char code_word[10] = "command:";
+unsigned long code;
+int char_index = 0;
+
+/*Sets up program. Connects to wifi or creates a hotspot*/
+void setup() {
+  Serial.begin(9600);
+
+  Serial.println();
+  Serial.println("Configuring access point...");
+
+  // You can remove the password parameter if you want the AP to be open.
+  
+  // Configures static IP address
+  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("STA Failed to configure");
+  }
+  
+  WiFi.begin(existing_ssid, existing_password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  Serial.print("AP IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println(WiFi.macAddress());
+  
+  server.begin();
+  
+  Serial.println("Server started");
+  
+  IrSender.begin(IR_SEND_PIN, ENABLE_LED_FEEDBACK); // Specify send pin and enable feedback LED at default feedback LED pin
+
+  Serial.print("Ready to send IR signals at pin ");
+  Serial.println(IR_SEND_PIN);
+
+  pinMode(IR_SEND_PIN, OUTPUT);
+}
+
+/*sends an IR code*/
+void send_message(unsigned long c){//const char message[]){
+  //unsigned longs are 32 bits so max number is 4294967295 = FFFFFFFF
+  //unsigned long code = strtoul(message, NULL, 16);
+  Serial.print("Sending msg:");
+  Serial.println(c);
+  //Serial.print("Sending code:");
+  //Serial.println(code);
+
+  //the receiver has to be disabled to send messages
+   
+  IrSender.sendNEC(c,32);// SENDING_REPEATS); //sendNECRaw
+
+  //restarts the reciever
+}
+
+int count = 0;
+/*checks for messages over wifi*/
+void check_wifi(){
+  WiFiClient client = server.available();   // listen for incoming clients
+  if (client) {                             // if you get a client,
+    Serial.println("New Client.");           // print a message out the serial port
+    String currentLine = "";                // make a String to hold incoming data from the client
+    while (client.connected()) {            // loop while the client's connected
+      if (client.available()) {             // if there's bytes to read from the client,
+        char c = client.read();             // read a byte, then
+        Serial.write(c);                    // print it out the serial monitor
+        if (c == '\n') {                    // if the byte is a newline character
+
+          // if the current line is blank, you got two newline characters in a row.
+          // that's the end of the client HTTP request, so send a response:
+          if (currentLine.length() == 0) {
+            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+            // and a content-type so the client knows what's coming, then a blank line:
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println();
+            //int response = getProjState(currentLine);
+            //client.println(response);
+            client.println(proj_on?1:0);
+            client.println(recieved_codes);
+            
+            for(int i = 0; recieved_codes[i] != '\0'; i++){
+              recieved_codes[i] = '\0';
+            }
+            char_index = 0;
+            // The HTTP response ends with another blank line:
+            client.println();
+            
+            // break out of the while loop:
+            break;
+          } else {//reached the end of the line
+            //if the line is a GET request(excluding a request for the icon)
+            if(currentLine.startsWith("GET /") &&  !currentLine.startsWith("GET /favicon.ico")){
+              String s = currentLine.substring(5);
+              //aux func
+              Serial.println(s);
+              toCode(s, client); //unsigned long c =
+              //int n = c.length();
+              //char char_array[n + 1];
+              //strcpy(char_array, c.c_str());
+              //cuts the string and converts it into a char array
+              //send_message(c);//char_array);
+            }
+            currentLine = "";
+          }
+        } else if (c != '\r') {  // if you got anything else but a carriage return character,
+          currentLine += c;      // add it to the end of the currentLine
+        }
+      }
+    }
+    // close the connection:
+    client.stop();
+    Serial.println("Client Disconnected.");
+  }
+}
+
+void getProjState(){
+  char res = '2';
+  
+  Serial.print("get_status\n");
+  res = '3';
+  delay(500);
+  if (Serial.available() > 0) {
+    // read the incoming byte:
+    res = Serial.read();
+    if(res == '1'){
+      proj_on = true;
+    }
+    else if(res == '0'){
+      proj_on = false;
+    }
+    Serial.println("got: "+res);
+    Serial.println("proj: "+proj_on);
+  }
+}
+
+void toCode(String m, WiFiClient c){
+  unsigned long res = 0x0;//0x40BFB847;
+
+  if(m.startsWith("projector"))
+  {  //projector
+    String mid = m.substring(10);
+    Serial.println(mid);
+
+    if(mid.startsWith("on")){
+      proj_on = true;
+      res = 0x40BFB847;
+      send_message(res);
+      return;
+    }
+    else if(mid.startsWith("off")){
+      //res = ;
+      proj_on = false;
+      send_message(0x40BFB847);
+      delay(2000);
+      send_message(0x40BFB847);
+      return;
+    }
+    else if(mid.startsWith("sources")){
+      res = 0x40BFF807;
+      send_message(res);
+      return;
+    }
+    else if(mid.startsWith("ok")){
+      res = 0x40BFD02F;
+      send_message(res);
+      return;
+    }
+    else if(mid.startsWith("l")){
+      res = 0x40BF50AF;
+      send_message(res);
+      return;
+    }
+    else if(mid.startsWith("r")){
+      res = 0x40BF10EF;
+      send_message(res);
+      return;
+    }
+    else if(mid.startsWith("u")){
+      res = 0x40BF906F;
+      send_message(res);
+      return;
+    }
+    else if(mid.startsWith("d")){
+      res = 0x40BF807F;
+      send_message(res);
+      return;
+    }
+    else if(mid.startsWith("vup")){
+      res = 0x40BF8877;
+      send_message(res);
+      return;
+    }
+    else if(mid.startsWith("vdown")){
+      res = 0x40BFA857;
+      send_message(res);
+      return;
+    }
+    else if(mid.startsWith("mute")){
+      res = 0x40BF40BF;
+      send_message(res);
+      return;
+    }
+    else if(mid.startsWith("back")){
+      res = 0x40BFB04F;
+      send_message(res);
+      return;
+    }
+    else if(mid.startsWith("options")){
+      res = 0x40BF7887;
+      send_message(res);
+      return;
+    }
+    else if(mid.startsWith("hdmi")){
+      send_message(0x40BFF807); //sources
+      delay(500);
+      send_message(0x40BF807F); //d
+      delay(500);
+      send_message(0x40BF10EF); //r
+      delay(500);
+      send_message(0x40BFD02F); //ok
+      return;
+    }
+    else if(mid.startsWith("status")){
+      res = 0x0;
+
+      getProjState();
+      
+      return;
+    }
+    else{
+      int n = m.substring(0,10).length();
+      char char_array[n + 1];
+      strcpy(char_array, m.substring(0,10).c_str());
+      unsigned long code = strtoul(char_array, NULL, 16);
+      send_message(code);
+      Serial.println(code);
+    }
+  }
+  else if(m.startsWith("light"))
+  {
+    String mid = m.substring(6);
+    Serial.println(mid);
+
+    if(mid.startsWith("on")){
+      send_message(0x00FFA25D);
+      return;
+    }
+    else if(mid.startsWith("off")){
+      send_message(0x00FFE21D);
+    }
+    else if (mid.startsWith("1")) {
+      send_message(0x00FF22DD);
+    } else if (mid.startsWith("2")) {
+      send_message(0x00FFC23D);
+    } else if (mid.startsWith("3")) {
+      send_message(0x00FFE01F);
+    } else if (mid.startsWith("4")) {
+      send_message(0x00FF906F);
+    } else if (mid.startsWith("5")) {
+      send_message(0x00FF6897);
+    } else if (mid.startsWith("6")) {
+      send_message(0x00FFB04F);
+    } else if (mid.startsWith("7")) {
+      send_message(0x00FF30CF);
+    } else if (mid.startsWith("8")) {
+      send_message(0x00FF7A85);
+    }
+  }
+  else if(m.startsWith("tv"))
+  {
+    String mid = m.substring(3);
+    Serial.println(mid);
+
+    if(mid.startsWith("on")){
+      send_message(0x00000000);
+      return;
+    }
+    else if(mid.startsWith("off")){
+      send_message(0x00000000);
+    }
+    else if (mid.startsWith("menu")) {
+      send_message(0x02FDDA25);
+    }
+  }
+}
+
+
+/*the main loop*/
+void loop() {
+  check_wifi();
+}
